@@ -3,6 +3,7 @@ from http.server import SimpleHTTPRequestHandler
 import socketserver
 from urllib.parse import parse_qs
 
+
 class MeuManipulador(SimpleHTTPRequestHandler):
     def listar_diretorio(self, path):
         try:
@@ -13,7 +14,7 @@ class MeuManipulador(SimpleHTTPRequestHandler):
             self.send_header("Content-type", "text/html")
             self.end_headers()
             # Copia o conteúdo do arquivo para o cliente
-            self.copyfile(f, self.wfile)
+            self.wfile.write(f.read().encode("utf-8"))
             f.close()
             return None
         except FileNotFoundError:
@@ -29,34 +30,26 @@ class MeuManipulador(SimpleHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-type", "text/html")
                 self.end_headers()
-                self.wfile.write((""))
+                self.wfile.write((content.encode("utf-8")))
             except FileNotFoundError:
                 self.send_error(404, "File not found")
 
         elif self.path == '/login_failed':
-            self.send_response(200)
-            self.send_header
-            self.end_headers
-
-            # with open(os.path.join(os.getcwd(), 'login.html'), 'r' enconding='utf-8') as file:
-            #     content = login_file.read
-
-            # mensagem = 'dfkjgfndkjngf'
-            # content = content.replace("lionjdsbjfn")
-
-            # self.wfile.write(content.encode())
+            pass
 
         else:
             super().do_GET()
 
-    
-    def usuario_existente(self, login):
-        with open('arquivos.txt', 'r') as dados_file:
+    def usuario_existente(self, login, password):
+        with open('arquivos.txt', 'r', encoding='utf-8') as dados_file:
             for line in dados_file:
-                stored_login, _ = line.strip().split(';')
-                print(stored_login)
+                stored_login, storage_password = line.strip().split(';')
+
                 if login == stored_login:
-                    return True
+                    print("chequei e localizei o login informado")
+                    print("senha: " + password)
+                    print("senha armazenada: " + password)
+                    return password == storage_password
         return False
 
     def do_POST(self):
@@ -64,35 +57,41 @@ class MeuManipulador(SimpleHTTPRequestHandler):
         if self.path == '/enviar_login':
             content_length = int(self.headers['Content-Length'])
             body = self.rfile.read(content_length).decode('utf-8')
-            form_data = parse_qs(body)       
-
-            with open(os.path.join(os.getcwd(), "response.html"), "r") as response_file:
-                content = response_file.read()
+            form_data = parse_qs(body)
 
             print("Dados do formulário: ")
-            print("Email: ", form_data.get('email',[''])[0])
-            print("Senha: ", form_data.get('senha',[''])[0])
+            print("Email: ", form_data.get('email', [''])[0])
+            print("Senha: ", form_data.get('senha', [''])[0])
 
             login = form_data.get('email', [''])[0]
+            password = form_data.get('senha', [''])[0]
 
-            if self.usuario_existente(login):
+            if self.usuario_existente(login, password):
                 self.send_response(200)
                 self.send_header('Content-type', 'text/html')
                 self.end_headers()
-                mensagem = f'Usuario {login} já consta em nossos registros'
-                self.wfile.write(mensagem.encode('utf-8'))
+
+                with open(os.path.join(os.getcwd(), "response.html"), "r") as response_file:
+                    content_error = response_file.read()
+
+                self.wfile.write(content_error.encode('utf-8'))
             else:
-                email=form_data.get('email',[''])[0]
-                password = form_data.get('senha',[''])[0]
+                self.send_response(200)
+                self.send_header('Content-type', 'text/html')
+                self.end_headers()
+
+                email = form_data.get('email', [''])[0]
+                password = form_data.get('senha', [''])[0]
 
                 with open('arquivos.txt', 'a') as dados_file_write:
-                    dados_file_write.write(f"{email}; {password}\n")
-                    print(dados_file_write)
+                    dados_file_write.write(f"\n{email};{password}")
 
-            
+                with open(os.path.join(os.getcwd(), "error.html"), "r") as error:
+                    reply = error.read()
+
+                self.wfile.write(reply.encode('utf-8'))
         else:
-            super(MeuManipulador.self).do_POST()
-
+            super(MeuManipulador, self).do_POST()
 
 
 # Define o IP a ser utilizado
@@ -107,3 +106,5 @@ with socketserver.TCPServer(("", porta), manipulador) as http:
 
     # Mantém o servidor em execução indefinidamente
     http.serve_forever()
+
+
