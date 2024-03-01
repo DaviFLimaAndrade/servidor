@@ -3,6 +3,7 @@ from http.server import SimpleHTTPRequestHandler
 import socketserver
 from urllib.parse import parse_qs, urlparse
 import hashlib
+from database import conexao
 
 
 class MyHandler(SimpleHTTPRequestHandler):
@@ -23,27 +24,26 @@ class MyHandler(SimpleHTTPRequestHandler):
 
     def check_login(self, login, senha):
         # verifica se o login já existe no arquivo
-        with open("arquivos.txt", "r", encoding="UTF-8") as file:
-            for line in file:
-                if line.strip():
-                    print("Linha lida:", line)  # Adicionando uma instrução de impressão para depuração
-                    parts = line.strip().split(";")
-                    if len(parts) == 3:
-                        login_stored, password_stored_hash, stored_name = parts
-                        if login == login_stored:
-                            # trecho HASH
-                            senha_hash = hashlib.sha256(senha.encode('utf-8')).hexdigest()
-                            # verifica se os hash coincidem
-                            return senha_hash == password_stored_hash
-                    else:
-                        pass
+        cursor = conexao.cursor()
+        cursor.execute("SELECT senha FROM dados_login WHERE login = %s", (login,))
+        resultado = cursor.fetchone()
+        cursor.close()
+
+        if resultado:
+            senha_hash = hashlib.sha256(senha.encode('utf-8')).hexdigest()
+            return senha_hash == resultado[0]
+
         return False
 
     def adicionar_usuario(self, login, senha, nome):
+        cursor = conexao.cursor()
+
         senha_hash = hashlib.sha256(senha.encode('utf-8')).hexdigest()
-        # adiciona o novo usuario ao arquivo
-        with open('arquivos.txt', 'a', encoding='utf-8') as file:
-            file.write(f'{login};{senha_hash};{nome}\n')
+        cursor.execute("INSERT INTO dados_login (login, senha, nome) VALUES (%s, %s, %s)", (login, senha_hash, nome))
+
+        conexao.commit()
+
+        conexao.close()
 
     def remover_ultima_linha(self, arquivo):
         print('vou excluir ultima linha')
@@ -122,36 +122,32 @@ class MyHandler(SimpleHTTPRequestHandler):
 
             if self.check_login(login, senha):
 
-                with open(os.path.join(os.getcwd(), 'response.html'), 'r', encoding='UTF-8') as response_file:
-                    content = response_file.read()
-
                 self.send_response(200)
-                self.send_header("Content-type", "text/html")
+                self.send_header("Content-type", "text/html; charset=utf-8")
                 self.end_headers()
                 mensagem = f"Usuário {login} logado com sucesso!"
-                self.wfile.write(content.encode('UTF-8'))
                 self.wfile.write(mensagem.encode('UTF-8'))
                 self.wfile.flush()
 
             else:
                 # verifica se o login ja existe no arquivo
-                if (any(line.startswith(f"{login};") for line in open("arquivos.txt", "r", encoding="UTF-8"))):
-                    # redireciona o cliente para a rota "/login_failed"
+                cursor = conexao.cursor()
+                cursor.execute("SELECT login FROM dados_login WHERE login = %s", (login,))
+                resultado = cursor.fetchone()
+
+                if resultado:
                     self.send_response(302)
-                    self.send_header("Location", "/login_failed")
+                    self.send_header('location', '/login_failed')
                     self.end_headers()
-                    return  # adicionando um return para evitar a execução do restante do código
+                    cursor.close()
+                    return
 
                 else:
-                    self.adicionar_usuario(login, senha, nome=None)
-
-                    # redireciona o cliente para a rota cadastro com os dados de login e senha
-                    self.send_response(302)
-                    self.send_header('Location', f'/cadastro?login={login}&senha={senha}\n')
-                    self.end_headers()
-
-                    return  # adicionando um return para evitar a execução do restante do código
-
+                        self.send_response(302)
+                        self.send_header('Location', f'cadastro?Login={login}&senha={senha}')
+                        self.end_headers()
+                        cursor.close()
+                        return
 
         elif self.path.startswith('/confirmar_cadastro'):
             # obtém o comprimento do corpo da requisição
@@ -168,6 +164,19 @@ class MyHandler(SimpleHTTPRequestHandler):
 
             # hash a senha fornecida pelo usuario
             senha_hash = hashlib.sha256(senha.encode('utf-8')).hexdigest()
+
+            self.adicionar_usuario(login, senha, nome)
+
+            with open(os.path.join(os.getcwd(), 'msg_sucesso.html'), 'rb') as file:
+                content = file.read().decode('utf-8')
+
+            content = content.replace('{login}', login)
+            content = content.replace('{nome}', nome)
+
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(content.encode('utf-8'))
 
             if self.check_login(login, senha):
                 # atualiza o arquivo com o nome, se a senha estiver correta
