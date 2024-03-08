@@ -3,7 +3,16 @@ from http.server import SimpleHTTPRequestHandler
 import socketserver
 from urllib.parse import parse_qs, urlparse
 import hashlib
-from database import conexao
+from database import conectar
+import os
+from http.server import SimpleHTTPRequestHandler
+import socketserver
+from urllib.parse import parse_qs, urlparse
+import hashlib
+
+
+conexao = conectar()
+
 
 
 class MyHandler(SimpleHTTPRequestHandler):
@@ -23,9 +32,9 @@ class MyHandler(SimpleHTTPRequestHandler):
         return super().list_directory(path)
 
     def check_login(self, login, senha):
-        # verifica se o login já existe no arquivo
+
         cursor = conexao.cursor()
-        cursor.execute("SELECT senha FROM dados_login WHERE login = %s", (login,))
+        cursor.execute("SELECT senha FROM dados_login WHERE login = %s", (login,)) 
         resultado = cursor.fetchone()
         cursor.close()
 
@@ -42,8 +51,7 @@ class MyHandler(SimpleHTTPRequestHandler):
         cursor.execute("INSERT INTO dados_login (login, senha, nome) VALUES (%s, %s, %s)", (login, senha_hash, nome))
 
         conexao.commit()
-
-        conexao.close()
+        cursor.close()
 
     def remover_ultima_linha(self, arquivo):
         print('vou excluir ultima linha')
@@ -125,8 +133,11 @@ class MyHandler(SimpleHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-type", "text/html; charset=utf-8")
                 self.end_headers()
-                mensagem = f"Usuário {login} logado com sucesso!"
-                self.wfile.write(mensagem.encode('UTF-8'))
+
+                with open(os.path.join(os.getcwd(), 'register_cad_turmas.html'), 'rb') as file:
+                    content = file.read().decode('utf-8')
+
+                self.wfile.write(content.encode('UTF-8'))
                 self.wfile.flush()
 
             else:
@@ -167,7 +178,7 @@ class MyHandler(SimpleHTTPRequestHandler):
 
             self.adicionar_usuario(login, senha, nome)
 
-            with open(os.path.join(os.getcwd(), 'msg_sucesso.html'), 'rb') as file:
+            with open(os.path.join(os.getcwd(), 'response.html'), 'rb') as file:
                 content = file.read().decode('utf-8')
 
             content = content.replace('{login}', login)
@@ -180,16 +191,11 @@ class MyHandler(SimpleHTTPRequestHandler):
 
             if self.check_login(login, senha):
                 # atualiza o arquivo com o nome, se a senha estiver correta
-
-                with open('arquivos.txt', 'r', encoding='utf-8') as file:
-                    lines = file.readlines()
-
-                with open('arquivos.txt', 'w', encoding='utf-8') as file:
-                    for line in lines:
-                        stored_login, stored_senha, stored_nome = line.strip().split(';')
-                        if login == stored_login and senha_hash == stored_senha:
-                            line = f'{login};{senha_hash};{nome}\n'
-                        file.write(line)
+                self.send_response(200)
+                self.send_header("Content-type", "text/html; charset=utf-8")
+                self.end_headers
+                mensagem = f"usuario {login} logado com sucesso"
+                self.wfile.write(mensagem.encode("utf-8"))
 
                 # redireciona o cliente para onde desejar após a condirmação
                 with open(os.path.join(os.getcwd(), 'index.html'), 'r', encoding='UTF-8') as response_file:
